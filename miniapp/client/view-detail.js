@@ -1,6 +1,6 @@
 // 项目详情：头部、讲解、README、备注、追问、信息
 import { S, on } from './state.js';
-import { h, icon, toast, fmtNum, timeAgo, fmtDate, fmtDuration, fmtSize, langColor, markTerms, popover, copyText, confirmDialog, fill } from './ui.js';
+import { h, icon, toast, fmtNum, timeAgo, fmtDate, fmtDuration, fmtSize, langColor, markTerms, popover, copyText, confirmDialog, fill, splitName, info } from './ui.js';
 import { renderMarkdown, handleAnchorClick } from './md.js';
 import * as A from './actions.js';
 
@@ -97,7 +97,7 @@ export function renderDetail() {
   if (!host) return;
   if (!S.sel) {
     V = null;
-    fill(host, h('div.dhead.only-narrow', null, h('button.btn.ghost.sm.back', { type: 'button', onclick: A.backToList }, icon('back'), '返回列表')), h('div.empty', null, h('h2', null, '选一个项目'), h('p', null, '点左边的项目，看它是干什么的。可以让 AI 用大白话给你讲。')));
+    fill(host, h('div.dhead.only-narrow', null, h('button.btn.ghost.sm.back', { type: 'button', onclick: A.backToList }, icon('back'), '返回列表')), h('div.empty', null, h('div.brand-mark.lg', null, icon('book')), h('h2', null, '选一个项目'), h('p', null, '点左边的项目，看它是干什么的。可以让 AI 用大白话给你讲。')));
     return;
   }
   const d = S.detail;
@@ -107,7 +107,7 @@ export function renderDetail() {
     return;
   }
   if (!V || V.key !== d.key) {
-    const el = { head: h('div.dhead'), choices: h('div.choices'), runs: h('div', { style: 'padding:0 16px' }), tabs: h('div.tabs', { role: 'tablist' }), panel: h('div.tabpanel', { role: 'tabpanel' }) };
+    const el = { head: h('div.dhead'), choices: h('div.choices'), runs: h('div.runs'), tabs: h('div.tabs', { role: 'tablist' }), panel: h('div.tabpanel', { role: 'tabpanel' }) };
     V = { key: d.key, tab: null, el, readmeSig: '', chatCount: -1 };
     fill(host, el.head, el.choices, el.runs, el.tabs, el.panel);
     host.scrollTop = 0;
@@ -137,38 +137,49 @@ function updateHead() {
         h('button', { type: 'button', 'aria-label': '移出「' + names.get(id) + '」', title: '移出这个收藏夹', onclick: () => A.setMembership(d.key, { remove: [id] }) }, icon('x', 12)),
       ),
     );
-  fill(V.el.head, 
+  const [owner, name] = splitName(d.fullName);
+  fill(V.el.head,
     h('button.btn.ghost.sm.back.only-narrow', { type: 'button', onclick: A.backToList }, icon('back'), '返回列表'),
-    h('h2.dtitle', null, h('a', { href: d.url, target: '_blank', rel: 'noopener noreferrer', title: '在 GitHub 打开' }, d.fullName), ' ', icon('external')),
+    h('div.dtop', null,
+      h('h2.dtitle', null, owner ? h('span.o', null, owner + ' / ') : null, h('span', null, name)),
+      h('a.btn.sm.ghost', { href: d.url, target: '_blank', rel: 'noopener noreferrer', title: '在 GitHub 打开 ' + d.fullName }, icon('external'), 'GitHub'),
+    ),
     d.description ? h('p.ddesc', null, d.description) : null,
     h('div.dmeta', null, meta),
     h('div.dcolls', null, chips, h('button.btn.sm.ghost', { type: 'button', onclick: (e) => memberPicker(e.currentTarget) }, icon('folder'), chips.length ? '管理收藏夹' : '加入收藏夹')),
   );
 }
 
+let closeMember = null; // 收藏夹弹层开着时，这里是它的关闭函数；再点一次按钮就收起来
 function memberPicker(anchor) {
+  if (closeMember) {
+    closeMember();
+    return;
+  }
   const d = S.detail;
   const colls = S.st?.collections || [];
-  const body = h('div', null, h('div.hint', { style: 'padding:4px 8px' }, '勾选就放进去，取消勾选就移出'));
+  const body = h('div', null, h('div.hint', { style: 'padding:4px 10px' }, '勾选就放进去，取消勾选就移出'));
   for (const c of colls) {
     const cb = h('input', { type: 'checkbox', checked: d.collections.includes(c.id) });
     cb.addEventListener('change', () => A.setMembership(d.key, cb.checked ? { add: [c.id] } : { remove: [c.id] }));
     body.append(h('label', null, cb, h('span', null, c.name)));
   }
-  popover(anchor, body);
+  closeMember = popover(anchor, body, { label: '管理收藏夹', onClose: () => { closeMember = null; } });
 }
 
+// 「让 AI 讲讲」：两个小胶囊。说明文字放在悬停提示里，讲解页里也有完整的介绍
 function updateChoices() {
   const d = S.detail;
   const off = S.st && S.st.agent && !S.st.agent.available;
   const busy = d.calls.some((c) => c.kind === 'explain');
   const choice = (mode, ico, title, sub) =>
-    h('button.choice.' + mode, { type: 'button', disabled: Boolean(off || busy), onclick: () => startExplain(mode) },
-      h('span.ico', null, icon(ico)),
-      h('span', null, h('b', null, title + (d.explain?.[mode] ? '（重新讲）' : '')), h('span.s', null, sub)),
+    h('button.choice.' + mode, { type: 'button', title: sub, disabled: Boolean(off || busy), onclick: () => startExplain(mode) },
+      icon(ico),
+      h('span', null, title + (d.explain?.[mode] ? '（重新讲）' : '')),
     );
-  fill(V.el.choices, 
-    off ? h('div.notice', { style: 'grid-column:1/-1;margin:0' }, icon('alert'), h('span', null, S.st.agent.reason || 'AI 功能暂时不可用')) : null,
+  fill(V.el.choices,
+    off ? h('div.notice', null, icon('alert'), h('span', null, S.st.agent.reason || 'AI 功能暂时不可用')) : null,
+    h('span.lead', null, '让 AI 讲讲'),
     choice('cloud', 'cloud', '云讲解', '只看 README 和公开信息，不下载代码'),
     choice('local', 'code', '本地讲解', '把代码拉到缓存里，翻着代码讲' + (d.sizeKB ? '（约 ' + fmtSize(d.sizeKB) + '）' : '')),
   );
@@ -200,8 +211,6 @@ function updateRuns() {
       }),
     ),
   );
-  if (d.calls.length) V.el.runs.style.paddingTop = '12px';
-  else V.el.runs.style.paddingTop = '0';
 }
 
 function updateTabs() {
@@ -296,7 +305,7 @@ function fillExplain() {
         h('h2', null, mode === 'cloud' ? '还没有云讲解' : '还没有本地讲解'),
         h('p', null, mode === 'cloud'
           ? 'AI 会读这个项目的 README 和公开信息，用大白话讲清楚它是干什么的、有什么用。不会下载任何代码，通常一分钟左右。'
-          : '先把代码浅克隆到本地缓存（只取最新一版），AI 翻着代码讲，能讲到代码是怎么组织的。缓存固定放在 Mini App 自己的文件夹里，用完可以清除。'),
+          : '先把代码浅克隆到本地缓存（只取最新一版），AI 翻着代码讲，能讲到代码是怎么组织的。缓存固定放在 Mini App 自己的文件夹里，用完可以清除。' + (d.sizeKB ? '这个仓库约 ' + fmtSize(d.sizeKB) + '。' : '')),
         h('button.btn.primary', { type: 'button', disabled: Boolean(off), onclick: () => startExplain(mode) }, icon(mode === 'cloud' ? 'cloud' : 'code'), mode === 'cloud' ? '生成云讲解' : '拉取代码并讲解'),
       ),
     );
@@ -371,13 +380,14 @@ function buildNotes() {
     }
   });
   const off = S.st && S.st.agent && !S.st.agent.available;
+  const notesTip = info('备注只存在本机，搜索时能搜到。Ctrl/⌘ + 回车 保存。');
   e.dyn.notes = h('div');
   fill(e.panel, 
     h('div.composer', null, ta, h('button.btn.primary', { type: 'button', onclick: add }, icon('plus'), '添加')),
-    h('div', { style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:-4px 0 14px' },
+    h('div', { style: 'margin:-4px 0 14px' }, h('div', { style: 'display:flex;gap:6px;align-items:center;flex-wrap:wrap' },
       h('button.btn.sm', { type: 'button', disabled: Boolean(off) || d.calls.some((c) => c.kind === 'notes'), onclick: () => A.askAiNotes(d.key) }, icon('sparkles'), '让 AI 记 3 条'),
-      h('span.hint', { style: 'margin:0' }, '备注只存在本机，搜索时能搜到。Ctrl/⌘ + 回车 保存。'),
-    ),
+      notesTip.tog,
+    ), notesTip.note),
     e.dyn.notes,
   );
 }
@@ -479,8 +489,9 @@ function buildChat() {
   e.dyn.sendFn = send;
   e.dyn.ta = ta;
   e.dyn.sugg = h('div.sugg');
-  e.dyn.intro = h('div', { style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px' });
-  fill(e.panel, e.dyn.intro, e.dyn.thread, e.dyn.sugg, ta, h('div', { style: 'height:8px' }), e.dyn.sendRow);
+  e.dyn.intro = h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px' });
+  e.dyn.tip = info('这个项目有自己的会话，不会和别的项目串。AI 看得到上面的讲解资料和你的备注。');
+  fill(e.panel, e.dyn.intro, e.dyn.tip.note, e.dyn.thread, e.dyn.sugg, ta, h('div', { style: 'height:8px' }), e.dyn.sendRow);
   V.chatCount = -1;
 }
 function fillChat() {
@@ -490,7 +501,7 @@ function fillChat() {
   const off = S.st && S.st.agent && !S.st.agent.available;
   const busyAny = d.calls.length > 0;
   fill(e.dyn.intro, 
-    h('span.hint', { style: 'margin:0;flex:1 1 220px' }, '这个项目有自己的会话，不会和别的项目串。AI 看得到上面的讲解资料和你的备注。'),
+    e.dyn.tip.tog,
     d.session ? h('button.btn.sm', { type: 'button', onclick: () => openSession(d) }, icon('panel'), '在侧边栏打开会话') : null,
     d.session ? h('button.btn.sm.ghost', { type: 'button', disabled: busyAny, title: 'AI 忘掉之前的对话重新开始；讲解、备注、聊天记录都保留', onclick: () => resetSession(d) }, icon('refresh'), '新开会话') : null,
   );

@@ -1,10 +1,14 @@
 // 弹窗：导入 Star、添加项目、设置、收藏夹管理、AI 整理
 import { S, on } from './state.js';
-import { h, icon, toast, dialog, confirmDialog, copyText, fmtSize, fmtDate, timeAgo, fill } from './ui.js';
+import { h, icon, toast, dialog, confirmDialog, copyText, fmtSize, fmtDate, timeAgo, fill, info } from './ui.js';
 import { runCard } from './view-detail.js';
 import * as A from './actions.js';
 
-const field = (label, hint, control) => h('label.f', null, h('span', null, label), hint ? h('span.h', null, hint) : null, control);
+// 说明（hint）默认收在标题旁边的 ⓘ 里，点一下才展开
+const field = (label, hint, control) => {
+  const tip = hint ? info(hint) : null;
+  return h('label.f', null, h('span.fl', null, label, tip?.tog), tip?.note, control);
+};
 
 // ---------- 导入 Star ----------
 export function importForm() {
@@ -180,6 +184,10 @@ export function openCollections() {
 }
 
 // ---------- 设置 ----------
+const EFFORT_LADDER = ['max', 'xhigh', 'high', 'medium', 'low']; // 页面和服务端都认的几档，从高到低
+const EFFORT_NAME = { max: '最高', xhigh: '超高', high: '高', medium: '中', low: '低' };
+const effortLabel = (e) => (EFFORT_NAME[e] || e) + '（' + e + '）';
+
 export function openSettings() {
   const body = h('div.form', { style: 'padding:16px' });
   let paintLive = null; // 重画「会随后台状态变化」的三块；每次 render() 都会换成新的
@@ -201,10 +209,43 @@ export function openSettings() {
     const model = h('select', { 'aria-label': 'AI 模型', style: 'width:100%;height:36px', disabled: !models });
     model.append(h('option', { value: '' }, '自动' + (models?.preferredKey ? '（优先 ' + models.preferredKey.split('/').pop() + '）' : '（用默认模型）')));
     for (const m of models?.models || []) model.append(h('option', { value: m.key, selected: s.modelKey === m.key }, m.label + '（' + m.key.split('/')[0] + '）'));
-    model.addEventListener('change', () => save({ modelKey: model.value }));
+    // 思考强度：只列「当前这个模型」在宿主配置里允许的档位，模型换了这里跟着换
+    let curEffort = s.effort || 'max';
+    const allowedEfforts = () => {
+      const key = model.value || models?.preferredKey || models?.defaultKey || '';
+      const have = new Set((models?.models || []).find((x) => x.key === key)?.efforts || []);
+      return EFFORT_LADDER.filter((e) => have.has(e)); // 从高到低
+    };
     const effort = h('select', { 'aria-label': '思考强度', style: 'width:100%;height:36px' });
-    for (const [v, t] of [['max', '最高（默认）：最仔细，也最慢'], ['medium', '中等'], ['low', '较低：更快、更省额度'], ['default', '跟随模型自己的默认']]) effort.append(h('option', { value: v, selected: (s.effort || 'max') === v }, t));
-    effort.addEventListener('change', () => save({ effort: effort.value }));
+    const paintEffort = () => {
+      const levels = allowedEfforts();
+      effort.replaceChildren();
+      if (!models || !levels.length) {
+        effort.disabled = true;
+        effort.append(h('option', { value: curEffort }, !models ? '（AI 现在不可用，暂时不能改）' : '这个模型没有可调的思考档位，这里不起作用'));
+        return;
+      }
+      effort.disabled = false;
+      effort.append(h('option', { value: 'max' }, '最高档（默认）：' + effortLabel(levels[0])));
+      for (const e of levels.slice(1)) effort.append(h('option', { value: e }, effortLabel(e)));
+      effort.append(h('option', { value: 'default' }, '跟随模型自己的默认'));
+      const want = curEffort === levels[0] ? 'max' : curEffort; // 选了最高那档，和「最高档」是一回事
+      effort.value = want === 'max' || want === 'default' || levels.slice(1).includes(want) ? want : 'max';
+    };
+    model.addEventListener('change', async () => {
+      if (!(await save({ modelKey: model.value }, true))) return;
+      if (curEffort !== 'max' && curEffort !== 'default' && !allowedEfforts().includes(curEffort)) {
+        curEffort = 'max'; // 新模型没有原来选的那一档
+        await save({ effort: 'max' }, true);
+        toast('这个模型没有原来选的思考档位，已改回「最高档」');
+      } else toast('已保存');
+      paintEffort();
+    });
+    effort.addEventListener('change', () => {
+      curEffort = effort.value;
+      save({ effort: curEffort });
+    });
+    paintEffort();
     const conc = h('select', { 'aria-label': '同时讲解的数量', style: 'width:100%;height:36px' });
     for (const n of [1, 2, 3, 4]) conc.append(h('option', { value: n, selected: s.concurrency === n }, n + ' 个'));
     conc.addEventListener('change', () => save({ concurrency: Number(conc.value) }));
@@ -235,11 +276,13 @@ export function openSettings() {
       recheck.disabled = false;
       toast(ok ? '已重新检测' : '检测没成功', ok ? '' : 'err');
     };
+    const recheckTip = info('装好 gh 或 git 之后点一下，不用重启。位置都是程序自己找的，一般不用手填。');
     // 下面三块会随后台状态变化（检测完 gh / git、保存了路径、AI 工作文件夹确定了……）自动刷新；
     // 输入框和下拉框不在其中，所以刷新不会打断正在做的输入。
     const statusDl = h('dl.kv');
     const toolsDl = h('dl.kv');
     const promptsBox = h('div');
+    const promptsTip = info('给 AI 的话只有一两行，长规则都放在这个文件夹里的文件中（相当于 skill.md），由 Mini App 自动维护。');
     paintLive = () => {
       const st = S.st;
       if (!st) return;
@@ -275,13 +318,13 @@ export function openSettings() {
       statusDl,
       h('h3.sec', null, '工具和位置'),
       toolsDl,
-      h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, recheck, h('span.hint', { style: 'margin:0' }, '装好 gh 或 git 之后点一下，不用重启。位置都是程序自己找的，一般不用手填。')),
+      h('div', null, h('div', { style: 'display:flex;gap:6px;align-items:center' }, recheck, recheckTip.tog), recheckTip.note),
       manual,
       h('h3.sec', null, '导入'),
       field('GitHub 用户名', '导入 Star 时默认用它；留空就用 gh 登录的账号。', user),
       h('h3.sec', null, 'AI'),
       field('用哪个模型来讲解', '默认优先选 MiniMax M3.1。这里只影响这个 Mini App 的会话。', model),
-      field('思考强度', '越高 AI 想得越仔细，也越慢、越费额度。模型不支持分档时不起作用。', effort),
+      field('思考强度', '只列出当前这个模型在 MiniMax Code 配置里允许的档位，换模型这里会跟着变。越高 AI 想得越仔细，也越慢、越费额度。', effort),
       field('同时讲解几个项目', '多开更快，也更费额度。', conc),
       field('本地讲解的大小上限（MB）', '超过就先问你一声再拉取，避免一不小心拉下一个大仓库。', size),
       field('README 里的图片', '第三方图片会让对方网站看到你的 IP，默认只载入 GitHub 自家的。', img),
@@ -296,8 +339,8 @@ export function openSettings() {
             cache.items.length ? h('div', { style: 'margin-top:10px' }, h('button.btn.sm.danger', { type: 'button', onclick: async () => { if (await confirmDialog({ title: '清除全部缓存', message: '删除所有项目的本地代码缓存（' + fmtSize(cache.totalKB) + '）。讲解和备注不受影响。', okText: '全部清除', danger: true })) { await A.clearAllCache(); render(); } } }, icon('trash'), '清除全部缓存')) : null,
           )
         : null,
-      h('h3.sec', null, '固定提示词'),
-      h('p.hint', { style: 'margin:0 0 8px' }, '给 AI 的话只有一两行，长规则都放在这个文件夹里的文件中（相当于 skill.md），由 Mini App 自动维护。'),
+      h('h3.sec', null, '固定提示词', promptsTip.tog),
+      promptsTip.note,
       promptsBox,
       h('h3.sec', null, '导出'),
       h('button.btn.sm', { type: 'button', onclick: exportNow }, icon('copy'), '复制当前收藏夹的 Markdown'),

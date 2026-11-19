@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { copyFile, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { REPO_ROOT } from './helpers/sandbox.mjs';
 
@@ -126,4 +127,50 @@ test('设置面板：保存了路径、检测完了，面板要自己刷新；�
   assert.match(body, /onClose:\s*\(\)\s*=>\s*stopWatching\(\)/, '关闭对话框时要取消订阅，否则会一直泄漏');
   for (const id of ['statusDl', 'toolsDl', 'promptsBox']) assert.ok(new RegExp('fill\\(body,[\\s\\S]*\\b' + id + '\\b').test(body) && new RegExp('fill\\(' + id + ',').test(body), id + ' 要放进面板，并且能单独刷新');
   assert.ok(!/state'[^\n]*querySelector\([^)]*:focus/.test(body), '不能因为输入框有焦点就不刷新：在路径框里按回车后焦点还在框里');
+});
+
+test('h() 把 aria-pressed / aria-selected / aria-current 写成 "true" / "false"（真实宿主里出过：选中的收藏夹、标签页、列表行都不亮，因为布尔 true 被写成了空属性）', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'client h '));
+  const saved = { Node: globalThis.Node, document: globalThis.document };
+  try {
+    // 没有浏览器，就用一个最小的假 DOM 把 ui.js 真的跑起来
+    class FakeNode {}
+    class FakeEl extends FakeNode {
+      constructor(tag) {
+        super();
+        this.tag = tag;
+        this.attrs = new Map();
+        this.className = '';
+        this.children = [];
+        this.dataset = {};
+      }
+      setAttribute(k, v) { this.attrs.set(k, String(v)); }
+      getAttribute(k) { return this.attrs.has(k) ? this.attrs.get(k) : null; }
+      addEventListener() {}
+      append(...kids) { this.children.push(...kids); }
+    }
+    globalThis.Node = FakeNode;
+    globalThis.document = { createElement: (tag) => new FakeEl(tag), createTextNode: (text) => Object.assign(new FakeNode(), { text: String(text) }) };
+    await copyFile(join(CLIENT, 'ui.js'), join(dir, 'ui.mjs'));
+    const { h } = await import(pathToFileURL(join(dir, 'ui.mjs')).href);
+    const on = h('button', { 'aria-pressed': true, 'aria-selected': true, 'aria-current': true });
+    const off = h('button', { 'aria-pressed': false, 'aria-selected': false, 'aria-current': false });
+    for (const name of ['aria-pressed', 'aria-selected', 'aria-current']) {
+      assert.equal(on.getAttribute(name), 'true', name + ' 为 true 时要写成 "true"，不能是空属性');
+      assert.equal(off.getAttribute(name), 'false', name + ' 为 false 时要写成 "false"');
+    }
+    // 其它属性的老规矩不能变：false 不写，true 写成空属性，数字照常转成文字
+    assert.equal(h('i', { 'data-x': false }).getAttribute('data-x'), null);
+    assert.equal(h('i', { 'data-x': true }).getAttribute('data-x'), '');
+    assert.equal(h('i', { 'aria-label': 0 }).getAttribute('aria-label'), '0');
+    // 页面里确实有靠这几个属性画选中态的样式
+    const css = await read('style.css');
+    for (const sel of ["[aria-pressed='true']", "[aria-selected='true']", "[aria-current='true']"]) assert.ok(css.includes(sel), 'style.css 里没有 ' + sel + ' 的选中态样式');
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete globalThis[k];
+      else globalThis[k] = v;
+    }
+    await rm(dir, { recursive: true, force: true });
+  }
 });

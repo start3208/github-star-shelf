@@ -7,7 +7,14 @@ export function h(sel, props, ...kids) {
   if (parts.length > 1) el.className = parts.slice(1).join(' ');
   if (props && typeof props === 'object' && !(props instanceof Node) && !Array.isArray(props)) {
     for (const [k, v] of Object.entries(props)) {
-      if (v === null || v === undefined || v === false) continue;
+      if (v === null || v === undefined) continue;
+      // aria-* 要的是 "true" / "false" 这两个字符串，样式和读屏软件都认它；
+      // 默认的「true 写成空属性」会让 [aria-pressed='true'] 这类选中态样式永远匹配不上
+      if (typeof v === 'boolean' && k.startsWith('aria-')) {
+        el.setAttribute(k, String(v));
+        continue;
+      }
+      if (v === false) continue;
       if (k === 'class') el.className += (el.className ? ' ' : '') + v;
       else if (k === 'text') el.textContent = v;
       else if (k === 'dataset') Object.assign(el.dataset, v);
@@ -44,6 +51,7 @@ const ICONS = {
   message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   sparkles: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/>',
   sliders: '<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>',
+  filter: '<path d="M22 3H2l8 9.46V19l4 2v-8.54z"/>',
   trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/>',
   refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/>',
   external: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
@@ -73,6 +81,12 @@ export function icon(name, size) {
 }
 
 // ---------- 格式化 ----------
+/** 把 owner/repo 拆成两段；没有斜杠时 owner 是空的 */
+export function splitName(full) {
+  const s = String(full || '');
+  const i = s.indexOf('/');
+  return i > 0 ? [s.slice(0, i), s.slice(i + 1)] : ['', s];
+}
 export function fmtNum(n) {
   n = Number(n) || 0;
   if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
@@ -248,33 +262,79 @@ export function confirmDialog({ title, message, okText = '确定', danger = fals
   });
 }
 
-/** 在按钮下方打开一个小弹层；再次点击或点外面关闭 */
-export function popover(anchor, content) {
-  const pop = h('div.pop', { role: 'dialog' }, content);
+/** 把一段说明收进「ⓘ」里：默认收起，点一下展开，再点一下收起。
+ *  返回 { tog, note }：tog（那个 ⓘ）放在标题旁边，note（说明文字，默认藏着）放在标题下面。
+ *  tog 用 span 而不用 button：放进 <label> 里时，button 会被当成这个 label 对应的控件，抢走点击。 */
+export function info(text) {
+  const note = h('span.tipnote', { hidden: true }, text);
+  const tog = h('span.info', { role: 'button', tabindex: '0', 'aria-expanded': 'false', 'aria-label': '说明', title: '说明' }, 'ⓘ');
+  const flip = (e) => {
+    e.preventDefault(); // 在 <label> 里时，别让这一下点击转给输入框
+    e.stopPropagation();
+    const open = note.hidden;
+    note.hidden = !open;
+    tog.setAttribute('aria-expanded', String(open));
+  };
+  tog.addEventListener('click', flip);
+  tog.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') flip(e);
+  });
+  return { tog, note };
+}
+
+/** 在按钮旁边打开一个小弹层。点外面、按 Esc、滚动、改变窗口大小都会关掉；返回关闭函数。
+ *  打开时焦点会放进弹层里第一个能操作的控件，按 Esc 关掉后焦点回到按钮（键盘用户不会「丢」）。
+ *  想做到「再点一次按钮就收起来」：用 onClose 记下它已经关了，下次点按钮时先看这个记录（见 view-main.js 的 toggleScopes）。 */
+export function popover(anchor, content, { label = '', align = 'start', onClose } = {}) {
+  const pop = h('div.pop', { role: 'dialog', 'aria-label': label || null }, content);
   const host = anchor.closest('dialog') || document.body;
+  pop.style.cssText = 'position:fixed;left:0;top:0;visibility:hidden';
   host.append(pop);
   const r = anchor.getBoundingClientRect();
-  const w = Math.min(320, window.innerWidth - 16);
-  pop.style.position = 'fixed';
-  pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
-  pop.style.top = Math.min(r.bottom + 6, window.innerHeight - 120) + 'px';
+  const pw = pop.offsetWidth;
+  const ph = pop.offsetHeight;
+  const left = align === 'end' ? r.right - pw : r.left;
+  const below = r.bottom + 6;
+  const above = r.top - 6 - ph;
+  const top = below + ph > window.innerHeight - 8 && above >= 8 ? above : below;
+  pop.style.left = Math.max(8, Math.min(left, window.innerWidth - pw - 8)) + 'px';
+  pop.style.top = Math.max(8, Math.min(top, window.innerHeight - ph - 8)) + 'px';
+  pop.style.visibility = '';
+  let closed = false;
+  const openedAt = performance.now();
   const off = (e) => {
+    if (e.timeStamp < openedAt) return; // 打开它的那一下操作本身不算「点外面」
     if (pop.contains(e.target) || anchor.contains(e.target)) return;
-    close();
+    shut(false);
   };
   const key = (e) => {
-    if (e.key === 'Escape') close();
+    if (e.key !== 'Escape') return;
+    e.stopPropagation(); // 这一下 Esc 只用来关弹层，别再传给搜索框（它会把搜索词清掉）
+    shut(true);
   };
-  function close() {
+  const away = (e) => {
+    if (!pop.contains(e.target)) shut(false); // 弹层自己里面滚动不算
+  };
+  function shut(refocus) {
+    if (closed) return;
+    closed = true;
     document.removeEventListener('mousedown', off, true);
     document.removeEventListener('keydown', key, true);
+    document.removeEventListener('scroll', away, true);
+    window.removeEventListener('resize', onResize);
+    const hadFocus = pop.contains(document.activeElement);
     pop.remove();
+    onClose?.();
+    if (refocus || hadFocus) anchor.focus?.();
   }
-  setTimeout(() => {
-    document.addEventListener('mousedown', off, true);
-    document.addEventListener('keydown', key, true);
-  });
-  return close;
+  const onResize = () => shut(false);
+  // 立刻注册：不用 setTimeout 延后（延后的话，开得太快的下一次点击会比注册先到）
+  document.addEventListener('mousedown', off, true);
+  document.addEventListener('keydown', key, true);
+  document.addEventListener('scroll', away, true);
+  window.addEventListener('resize', onResize);
+  pop.querySelector('input, button, select, textarea, [tabindex]')?.focus({ preventScroll: true });
+  return () => shut(false);
 }
 
 export async function copyText(text) {

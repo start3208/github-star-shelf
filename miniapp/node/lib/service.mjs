@@ -476,7 +476,7 @@ export class Shelf {
     }
     if (patch.modelKey !== undefined) next.modelKey = clamp(patch.modelKey, 200);
     if (patch.effort !== undefined) {
-      if (!['max', 'medium', 'low', 'default'].includes(patch.effort)) throw new AppError('bad_setting', '思考强度不对');
+      if (!['max', 'xhigh', 'high', 'medium', 'low', 'default'].includes(patch.effort)) throw new AppError('bad_setting', '思考强度不对');
       next.effort = patch.effort;
     }
     if (patch.imageMode !== undefined) {

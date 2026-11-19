@@ -159,7 +159,7 @@ export class AgentHub {
     const v = await this.#modelsRaw();
     const def = v.raw.default ? v.raw.default.providerId + '/' + v.raw.default.modelId : '';
     const picked = this.state.settings.modelKey && v.models.some((x) => x.key === this.state.settings.modelKey) ? this.state.settings.modelKey : v.preferred ? v.preferred.key : def;
-    return { models: v.models.map(({ key, label }) => ({ key, label })), defaultKey: def, preferredKey: v.preferred ? v.preferred.key : '', pickedKey: picked };
+    return { models: v.models.map(({ key, label, efforts }) => ({ key, label, efforts })), defaultKey: def, preferredKey: v.preferred ? v.preferred.key : '', pickedKey: picked };
   }
   async #pickModel() {
     const v = await this.#modelsRaw();
