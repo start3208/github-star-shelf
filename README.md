@@ -6,6 +6,10 @@ Turn your GitHub stars into a shelf you can actually use. **GitHub Star Shelf** 
 
 Plugin ID `github-star-shelf` · MIT licensed · the interface is in Chinese.
 
+![The project list, collections and an AI explanation](docs/preview.png)
+
+*Screenshots use sample data. The light and dark themes both follow MiniMax Code; [a dark screenshot](docs/preview-dark.png) is included.*
+
 ## What it does
 
 - **Import** your stars with the GitHub CLI (`gh`), or the public stars of any user by name. READMEs are fetched in the background, so search can look inside them.
@@ -53,9 +57,11 @@ The offline tests fake other people's machines to cover this: a short `PATH`, to
 
 ## Tested environment
 
-- **MiniMax Code 3.1.16 on macOS (Apple silicon)**, with `gh` 2.96 logged in and Apple's `git`.
+- **MiniMax Code 3.1.16 on macOS (Apple silicon)**, with `gh` 2.96 logged in and Apple's `git`. Version 1.1.0 was used through this window: imported stars, cloud and local explanations, notes, follow-ups and the settings page.
+- **Install from Git:** the marketplace's *Import from Git repository* preview showed this package with its name, version, commit, declared permission (`agentAccess: session.run`) and the minimum version below, and the imported copy was used locally on the same machine.
 - **Offline tests** (`npm test`, about 130 tests, under 30 s): Node 22, 24 and 26 on macOS (Apple silicon). CI runs Node 22 and 24 on Ubuntu and macOS.
-- **Not verified:** Windows. The Windows folder rules are unit-tested with a simulated platform only, and the end-to-end tests need a POSIX `sh` to fake `gh` and `git`, so they are skipped there. GitHub Enterprise is not supported (`GH_HOST` is pinned to `github.com`).
+- **The page** (1.2.0): rendered in headless Chrome against an isolated copy of the app with a fake `gh`, `git` and AI, in light and dark themes, at widths from 360 to 1400 px: no console errors and no horizontal scrolling. Those screenshots are the ones above. This is not a real-browser test suite: it lives outside this repository and does not run in CI.
+- **Not verified:** Windows. The Windows folder rules are unit-tested with a simulated platform only, and the end-to-end tests need a POSIX `sh` to fake `gh` and `git`, so they are skipped there. Linux only runs in CI. The AI's permission confirmation card has only been exercised with a simulated Agent, because the real one never asked for a permission here. Whether "open session in sidebar" actually opens the sidebar cannot be seen from inside the page. GitHub Enterprise is not supported (`GH_HOST` is pinned to `github.com`).
 
 ## Data & access
 

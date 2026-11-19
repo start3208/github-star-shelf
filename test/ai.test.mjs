@@ -270,6 +270,25 @@ test('思考强度：最高 / 中 / 低 / 默认；模型不支持分档就不�
   assert.equal(models.defaultKey, 'x/other');
   assert.equal(models.pickedKey, 'x/other');
   assert.deepEqual(models.models.map((m) => m.key), ['minimax/MiniMax-M3.1-Flash', 'x/other']);
+  // 设置页要按「这个模型在宿主里声明了哪些档位」来列选项，所以档位要跟着模型列表返回
+  const byKey = new Map(models.models.map((m) => [m.key, m.efforts]));
+  assert.deepEqual(byKey.get('minimax/MiniMax-M3.1-Flash'), ['default', 'low', 'medium', 'high', 'xhigh', 'max']);
+  assert.deepEqual(byKey.get('x/other'), [], '没声明档位的模型回空数组，页面据此把下拉框置灰');
+});
+
+test('思考强度：high / xhigh 也认，并能传到模型；乱写的值照样拒绝', async (t) => {
+  const w = await ready(t);
+  const effort = async (level) => {
+    assert.equal((await w.app.post('/api/settings', { effort: level })).status, 200, level + ' 应该被接受');
+    await ask(w, KEY, '档位测试 ' + level);
+    return lastRun(w).model;
+  };
+  assert.equal((await effort('high')).thinking.effort, 'high');
+  assert.equal((await effort('xhigh')).thinking.effort, 'xhigh');
+  for (const bad of ['turbo', 'HIGH', '', 'maxim']) {
+    assert.equal((await w.app.post('/api/settings', { effort: bad })).status, 400, JSON.stringify(bad) + ' 应该被拒绝');
+  }
+  assert.equal((await w.app.state()).settings.effort, 'xhigh', '被拒绝的值不能改动已保存的设置');
 });
 
 test('排队与取消：同时讲解的数量有上限；排队的可以单独取消；运行中的可以停止，后面的接着跑', async (t) => {

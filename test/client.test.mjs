@@ -174,3 +174,18 @@ test('h() 把 aria-pressed / aria-selected / aria-current 写成 "true" / "false
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('设置页能选的思考档位，都是服务端认的（否则选了一个存不下去）', async () => {
+  const dialogs = sources['view-dialogs.js'];
+  const ladder = /const EFFORT_LADDER = \[([^\]]*)\]/.exec(dialogs);
+  assert.ok(ladder, '找不到 view-dialogs.js 里的 EFFORT_LADDER');
+  const clientLevels = ladder[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean);
+  assert.ok(clientLevels.length >= 4, '档位表看起来不对：' + clientLevels.join(','));
+  const service = await readFile(join(REPO_ROOT, 'miniapp', 'node', 'lib', 'service.mjs'), 'utf8');
+  // 服务端那行是 if (!['max', 'xhigh', ...].includes(patch.effort))；按 effort 定位再取方括号里的名单
+  const line = service.split('\n').find((l) => l.includes('patch.effort') && l.includes('.includes(')) || '';
+  const allowed = /\[([^\]]*)\]/.exec(line);
+  assert.ok(allowed, '找不到 service.mjs 里对 effort 的校验');
+  const serverLevels = allowed[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean);
+  for (const level of clientLevels) assert.ok(serverLevels.includes(level), '页面能选 ' + level + '，但服务端不认；要么把它加到 service.mjs 的校验里，要么从 EFFORT_LADDER 去掉');
+});

@@ -6,6 +6,10 @@
 
 插件 ID `github-star-shelf` · MIT 许可证 · 界面是中文。
 
+![项目列表、收藏夹和 AI 讲解](docs/preview.png)
+
+*截图用的是示例数据。明暗主题都跟随 MiniMax Code；另附[暗色截图](docs/preview-dark.png)。*
+
 ## 能做什么
 
 - **导入**：用 GitHub 命令行工具（`gh`）导入你的 Star，也可以填用户名导入对方公开的 Star。README 会在后台预取，所以搜索能搜进 README 里面。
@@ -53,9 +57,11 @@
 
 ## 已测试环境
 
-- **MiniMax Code 3.1.16，macOS（Apple 芯片）**，`gh` 2.96 已登录，`git` 是苹果自带的。
+- **MiniMax Code 3.1.16，macOS（Apple 芯片）**，`gh` 2.96 已登录，`git` 是苹果自带的。1.1.0 在这个窗口里实际用过：导入 Star、云讲解和本地讲解、备注、追问、设置页。
+- **从 Git 仓库导入**：插件市场的「从 Git 仓库导入」预览认出了这个包，显示出了名称、版本、commit、声明的权限（`agentAccess: session.run`）和下面的最低版本；导入后的副本在同一台机器上本地用过。
 - **离线测试**（`npm test`，约 130 条，不到 30 秒）：macOS（Apple 芯片）上的 Node 22、24 和 26。CI 在 Ubuntu 和 macOS 上跑 Node 22 和 24。
-- **没有验证：** Windows。Windows 的文件夹规则只用模拟的平台做了单元测试；端到端测试要用 POSIX 的 `sh` 来假装 `gh` 和 `git`，所以在 Windows 上会跳过。不支持 GitHub Enterprise（`GH_HOST` 固定为 `github.com`）。
+- **页面本身**（1.2.0）：在无头 Chrome 里，对着这份 Mini App 的隔离副本（假的 `gh`、`git` 和 AI）渲染过，明暗两套主题、从 360 到 1400 px 的各种宽度：没有控制台报错，也没有横向滚动。上面那两张截图就是这么来的。这不是一套真实的浏览器测试：脚本不在本仓库里，也不在 CI 里跑。
+- **没有验证：** Windows（文件夹规则只用模拟平台做了单元测试；端到端测试要用 POSIX 的 `sh` 来假装 `gh` 和 `git`，所以在 Windows 上会跳过）。Linux 只在 CI 里跑过。AI 的权限确认卡只用模拟的 Agent 测过，这台机器上的真实 AI 从没要过权限。「在侧边栏打开会话」到底有没有弹出侧边栏，从页面里看不到。不支持 GitHub Enterprise（`GH_HOST` 固定为 `github.com`）。
 
 ## 数据与访问
 

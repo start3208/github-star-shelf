@@ -211,18 +211,26 @@ export function openSettings() {
     for (const m of models?.models || []) model.append(h('option', { value: m.key, selected: s.modelKey === m.key }, m.label + '（' + m.key.split('/')[0] + '）'));
     // 思考强度：只列「当前这个模型」在宿主配置里允许的档位，模型换了这里跟着换
     let curEffort = s.effort || 'max';
+    // 自动 = 用哪个模型由服务端决定：优先 M3.1 这类首选模型，没有首选就是宿主默认模型。
+    // 服务端只给「首选模型」带思考强度，所以自动模式下只有它才有可调的档位，别的选了也不生效。
     const allowedEfforts = () => {
-      const key = model.value || models?.preferredKey || models?.defaultKey || '';
-      const have = new Set((models?.models || []).find((x) => x.key === key)?.efforts || []);
+      const entry = model.value
+        ? (models?.models || []).find((x) => x.key === model.value)
+        : models?.preferredKey
+          ? (models?.models || []).find((x) => x.key === models.preferredKey)
+          : null;
+      const have = new Set(entry?.efforts || []);
       return EFFORT_LADDER.filter((e) => have.has(e)); // 从高到低
     };
+    const NO_LEVELS = '这个模型没有可调的思考档位，这里不起作用';
+    const AUTO_NO_LEVELS = '自动用的是宿主默认模型，不带思考强度：在上面选一个具体模型才能调';
     const effort = h('select', { 'aria-label': '思考强度', style: 'width:100%;height:36px' });
     const paintEffort = () => {
       const levels = allowedEfforts();
       effort.replaceChildren();
       if (!models || !levels.length) {
         effort.disabled = true;
-        effort.append(h('option', { value: curEffort }, !models ? '（AI 现在不可用，暂时不能改）' : '这个模型没有可调的思考档位，这里不起作用'));
+        effort.append(h('option', { value: curEffort }, !models ? '（AI 现在不可用，暂时不能改）' : !model.value && !models.preferredKey ? AUTO_NO_LEVELS : NO_LEVELS));
         return;
       }
       effort.disabled = false;
@@ -234,11 +242,16 @@ export function openSettings() {
     };
     model.addEventListener('change', async () => {
       if (!(await save({ modelKey: model.value }, true))) return;
-      if (curEffort !== 'max' && curEffort !== 'default' && !allowedEfforts().includes(curEffort)) {
-        curEffort = 'max'; // 新模型没有原来选的那一档
+      const levels = allowedEfforts();
+      if (levels.length && curEffort !== 'max' && curEffort !== 'default' && !levels.includes(curEffort)) {
+        // 新模型有档位，但没有原来选的那一档：退回最高档（服务端本来也会这么做，这里把设置也改过来）
+        curEffort = 'max';
         await save({ effort: 'max' }, true);
         toast('这个模型没有原来选的思考档位，已改回「最高档」');
-      } else toast('已保存');
+      } else {
+        // 新模型没有档位就不动原来的选择，换回去还在
+        toast('已保存');
+      }
       paintEffort();
     });
     effort.addEventListener('change', () => {

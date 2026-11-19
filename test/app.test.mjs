@@ -263,11 +263,11 @@ test('设置：逐项校验，一项不对整个不生效；改动会存盘', as
   const mixed = await w.app.post('/api/settings', { concurrency: 3, effort: 'turbo' });
   assert.equal(mixed.status, 400);
   assert.equal((await w.app.state()).settings.concurrency, 2, '一项不对，其他项也不能生效');
-  const ok = await w.app.post('/api/settings', { concurrency: 3, githubUser: 'octocat', effort: 'low', imageMode: 'none', cloneMaxMB: 500 });
+  const ok = await w.app.post('/api/settings', { concurrency: 3, githubUser: 'octocat', effort: 'xhigh', imageMode: 'none', cloneMaxMB: 500 });
   assert.equal(ok.status, 200);
   await w.restart();
   const s = (await w.app.state()).settings;
-  assert.deepEqual([s.concurrency, s.githubUser, s.effort, s.imageMode, s.cloneMaxMB], [3, 'octocat', 'low', 'none', 500]);
+  assert.deepEqual([s.concurrency, s.githubUser, s.effort, s.imageMode, s.cloneMaxMB], [3, 'octocat', 'xhigh', 'none', 500]);
 });
 
 test('重启后项目、收藏夹、备注、README 都还在', async (t) => {
