@@ -37,7 +37,8 @@ export async function makeSandbox(label = 'shelf') {
     state: join(root, 'fake state'),
   };
   for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
-  return { root, ...dirs, cleanup: () => rm(root, { recursive: true, force: true }) };
+  // 刚被终止的子进程可能还在往目录里写最后一行：删除时遇到「目录非空」就等一下再删（慢机器上出现过 ENOTEMPTY）
+  return { root, ...dirs, cleanup: () => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }) };
 }
 
 /** 在 dir 里放一个假命令（sh 脚本，转去运行 test/helpers 里的 fake-*.mjs）。只在 macOS / Linux 上用 */

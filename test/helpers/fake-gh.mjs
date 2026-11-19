@@ -19,6 +19,9 @@ if (dir) {
   const line = { tool: 'gh', args, tag: process.env.SHELF_FAKE_TAG || '', GH_HOST: process.env.GH_HOST || '', GH_PROMPT_DISABLED: process.env.GH_PROMPT_DISABLED || '' };
   appendFileSync(join(dir, 'calls.log'), JSON.stringify(line) + '\n');
 }
+// 任何一次启动都先记下进程号、再睡一会儿：用来测「检测 gh / git」这类一启动就卡住的情况
+if (mode.startPidFile) writeFileSync(mode.startPidFile, String(process.pid));
+if (mode.startSlowMs) await new Promise((r) => setTimeout(r, mode.startSlowMs));
 const fail = (message, code = 1) => {
   process.stderr.write(message + '\n');
   process.exit(code);

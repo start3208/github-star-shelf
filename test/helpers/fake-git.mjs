@@ -30,6 +30,7 @@ while (args[i] === '-c') i += 2; // -c key=value
 if (args[i] === '-C') i += 2; // -C <dir>
 const cmd = args[i];
 if (cmd === 'clone') {
+  if (mode.gitPidFile) writeFileSync(mode.gitPidFile, String(process.pid));
   if (mode.cloneSlowMs) await new Promise((r) => setTimeout(r, mode.cloneSlowMs));
   if (mode.cloneFail) fail("fatal: unable to access 'https://github.com/x/y.git/': Could not resolve host: github.com");
   const dest = args[args.length - 1];

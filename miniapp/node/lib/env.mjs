@@ -150,19 +150,18 @@ function execText(file, args, { timeoutMs = 8000, signal, env, maxBuffer = 1024 
       }
       resolveText({ stdout, error: error || null });
     };
+    // 已经取消了（比如 Mini App 正在停止）：连进程都不要起，免得起了又马上杀
+    if (signal?.aborted) {
+      done(new Error('aborted'));
+      return;
+    }
     try {
       child = spawn(file, args, { env: env || process.env, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
     } catch (error) {
       done(error);
       return;
     }
-    if (signal) {
-      if (signal.aborted) {
-        onAbort();
-        return;
-      }
-      signal.addEventListener('abort', onAbort, { once: true });
-    }
+    signal?.addEventListener('abort', onAbort, { once: true });
     timer = setTimeout(() => {
       kill();
       done(new Error('timeout'));

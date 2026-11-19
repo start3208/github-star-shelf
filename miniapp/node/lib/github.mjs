@@ -17,6 +17,11 @@ export function limitMessage(waitMs) {
 
 export function run(file, args, { signal, timeoutMs = 60000, maxBuffer = 16 * 1024 * 1024, env, cwd } = {}) {
   return new Promise((resolve, reject) => {
+    // 已经取消了（比如 Mini App 正在停止）：连进程都不要起，免得起了又马上杀
+    if (signal?.aborted) {
+      reject(Object.assign(new Error('The operation was aborted'), { name: 'AbortError', code: 'ABORT_ERR' }));
+      return;
+    }
     const options = {
       timeout: timeoutMs,
       maxBuffer,

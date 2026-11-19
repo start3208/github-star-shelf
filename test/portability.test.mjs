@@ -8,6 +8,15 @@ import { boot } from './helpers/host.mjs';
 import { installFake, readCalls, setMode, shq, installScript } from './helpers/sandbox.mjs';
 import { e2e as test, explain, idle, importAll, ready, settled, world } from './helpers/world.mjs';
 
+const gone = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch {
+    return true;
+  }
+};
+
 const KEY = 'alice__rocket-core';
 const BOB = 'bob__lunar-notes';
 const detail = async (w, key = KEY) => (await w.app.get('/api/projects/' + key)).json;
@@ -273,6 +282,46 @@ test('Mini App 停止：在途的 gh 马上被终止，停止在 2 秒内完成'
       return true;
     }
   }, { what: 'gh process gone', timeout: 3000 });
+});
+
+test('stop() 自己就能终止在途的导入（gh api 读 Star 读到一半）：不能靠宿主先发停止信号', async (t) => {
+  const w = await world(t);
+  const pidFile = join(w.sb.root, 'gh2.pid');
+  await setMode(w.sb, { slowMs: 30000, pidFile });
+  await settled(w.app);
+  assert.equal((await w.app.post('/api/import', {})).status, 200);
+  const pid = Number(await w.app.waitFor(async () => (await readFile(pidFile, 'utf8').catch(() => '')).trim(), { what: 'gh started' }));
+  assert.ok(pid > 0 && !gone(pid), 'gh 应该正在跑');
+  const t0 = Date.now();
+  await w.app.stop(); // 注意：这里没有先 abort context.signal
+  assert.ok(Date.now() - t0 < 2000, '停止花了 ' + (Date.now() - t0) + ' 毫秒');
+  await w.app.waitFor(() => gone(pid), { what: 'gh process gone', timeout: 3000 });
+});
+
+test('stop() 自己就能终止在途的检测探测（gh --version 一启动就卡住）：不能靠宿主先发停止信号', async (t) => {
+  const w = await world(t);
+  const startPidFile = join(w.sb.root, 'gh-start.pid');
+  await setMode(w.sb, { startSlowMs: 30000, startPidFile });
+  await w.app.state(); // 页面第一次取状态：后台开始检测，会去运行 gh --version
+  const pid = Number(await w.app.waitFor(async () => (await readFile(startPidFile, 'utf8').catch(() => '')).trim(), { what: 'gh --version started' }));
+  assert.ok(pid > 0 && !gone(pid), 'gh 应该正在跑');
+  const t0 = Date.now();
+  await w.app.stop(); // 注意：这里没有先 abort context.signal
+  assert.ok(Date.now() - t0 < 2000, '停止花了 ' + (Date.now() - t0) + ' 毫秒');
+  await w.app.waitFor(() => gone(pid), { what: 'gh --version process gone', timeout: 3000 });
+});
+
+test('stop() 自己就能终止在途的 git clone（本地讲解拉代码到一半时停止）', async (t) => {
+  const w = await ready(t);
+  const gitPidFile = join(w.sb.root, 'git.pid');
+  await setMode(w.sb, { cloneSlowMs: 30000, gitPidFile });
+  assert.equal((await w.app.post('/api/projects/' + KEY + '/explain', { mode: 'local' })).status, 200);
+  const pid = Number(await w.app.waitFor(async () => (await readFile(gitPidFile, 'utf8').catch(() => '')).trim(), { what: 'git clone started' }));
+  assert.ok(pid > 0 && !gone(pid), 'git 应该正在跑');
+  const t0 = Date.now();
+  await w.app.stop();
+  assert.ok(Date.now() - t0 < 2000, '停止花了 ' + (Date.now() - t0) + ' 毫秒');
+  await w.app.waitFor(() => gone(pid), { what: 'git process gone', timeout: 3000 });
 });
 
 test('报错分类只看命令自己输出的报错，不看命令行里的路径：目录名碰巧叫 proxy 也不会判成「连不上」', async (t) => {

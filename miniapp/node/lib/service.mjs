@@ -12,8 +12,14 @@ export class Shelf {
   constructor(context, store, options = {}) {
     this.ctx = context;
     this.store = store;
-    // signal：Mini App 停止时，gh / git 的在途子进程一起终止。options.envCtx 只给测试注入假环境
-    this.gh = new GitHub(context.logger, { signal: context.signal, envCtx: options.envCtx });
+    // 自己的停止信号：宿主停止 Mini App 时（context.signal）会触发它，dispose() 也会触发它。
+    // gh / git 的在途子进程（包括检测用的探测）都挂在它上面：不管宿主先发信号、还是直接调 dispose()，它们都会一起终止。
+    // options.envCtx 只给测试注入假环境
+    this.stopCtl = new AbortController();
+    this.onHostAbort = () => this.stopCtl.abort();
+    if (context.signal?.aborted) this.stopCtl.abort();
+    else context.signal?.addEventListener('abort', this.onHostAbort, { once: true });
+    this.gh = new GitHub(context.logger, { signal: this.stopCtl.signal, envCtx: options.envCtx });
     this.listeners = new Set();
     this.importJob = null;
     this.prefetchJob = null;
@@ -517,6 +523,8 @@ export class Shelf {
 
   async dispose() {
     this.closed = true;
+    this.stopCtl.abort(); // 先终止所有在途的 gh / git 子进程
+    this.ctx.signal?.removeEventListener('abort', this.onHostAbort);
     this.importJob?.ctl.abort();
     this.prefetchJob?.ctl.abort();
     this.hub.dispose();
