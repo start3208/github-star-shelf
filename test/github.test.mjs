@@ -10,7 +10,9 @@ import { makeFixtures, makeManyFixtures } from './helpers/fixtures.mjs';
 
 const posixOnly = { skip: IS_WIN ? '需要 sh' : false };
 const log = { warn() {}, info() {}, error() {}, debug() {} };
-const FAKE_TOKEN = 'ghp_' + 'abcdefghijklmnopqrstuvwxyz0123456789'; // 拆开写：仓库里不留任何长得像真令牌的字符串
+// 前缀也拆开拼、内容只用数字：源码里不出现任何完整的令牌形状
+const TOKEN_PREFIX = 'gh' + 'p_';
+const FAKE_TOKEN = TOKEN_PREFIX + '123456789012345678901234567890123456';
 
 /** 一台「别人的电脑」：gh 和 git 都装在 PATH 里 */
 async function machine(t, { gh = true, git = true, authed = true, fixtures = makeFixtures() } = {}) {
@@ -305,8 +307,8 @@ test('gh 报错：页面上只显示固定的说明，原始报错只放在 deta
   const gh = newGh(sb);
   await assert.rejects(gh.getRepo('a/b'), (e) => {
     assert.equal(e.code, 'github_error');
-    assert.ok(!/alice|ghp_/.test(e.message), '页面文案里不能带路径或令牌');
-    assert.ok(!/ghp_/.test(e.extra.detail), '详情里的令牌也要去掉');
+    assert.ok(!new RegExp('alice|' + TOKEN_PREFIX).test(e.message), '页面文案里不能带路径或令牌');
+    assert.ok(!new RegExp(TOKEN_PREFIX).test(e.extra.detail), '详情里的令牌也要去掉');
     return true;
   });
 });

@@ -195,9 +195,9 @@ test('loginShellDirs：传给 shell 的命令是固定的，不含环境里的�
   t.after(sb.cleanup);
   const rec = join(sb.root, 'script.log');
   const shell = await fakeShell(sb, 'bash', 'printf "%s" "$2" > ' + shq(rec) + '\nexport PATH=/p/one\nexec /bin/sh -c "$2"\n');
-  await loginShellDirs({ platform: 'linux', env: { SHELL: shell, SECRET_TOKEN: 'leak-canary-7f3a', HOME: sb.home } });
+  await loginShellDirs({ platform: 'linux', env: { SHELL: shell, SECRET_TOKEN: '1234567890', HOME: sb.home } });
   const script = await readFile(rec, 'utf8');
-  assert.ok(!script.includes('leak-canary-7f3a') && !script.includes(sb.home), script);
+  assert.ok(!script.includes('1234567890') && !script.includes(sb.home), script);
   assert.match(script, /^printf '%s' '__SHELF_[0-9a-f]{12}__'; printf '%s' "\$PATH"; printf '%s' '__SHELF_[0-9a-f]{12}__'$/);
 });
 

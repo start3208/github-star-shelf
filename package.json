@@ -1,6 +1,6 @@
 {
   "name": "github-star-shelf",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": true,
   "description": "A MiniMax Code Mini App that turns your GitHub stars into a searchable shelf, with plain-language AI explanations of every project.",
   "license": "MIT",
