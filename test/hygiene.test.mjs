@@ -78,7 +78,7 @@ test('代码和测试里没有作者的账号名，也没有写死宿主的数�
 test('没有邮箱地址（noreply 和示例域名除外），没有看起来像令牌 / 私钥的字符串', () => {
   const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
   const OK_MAIL = /@(users\.noreply\.github\.com|example\.(com|org|net))$/i;
-  const SECRET = /gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._-]{20,}/;
+  const SECRET = /gh[pousr]_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{8,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-[A-Za-z0-9]{12,}|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._-]{20,}/;
   const bad = [];
   for (const f of texts) {
     for (const m of f.text.matchAll(EMAIL)) if (!OK_MAIL.test(m[0])) bad.push(f.rel + ' → ' + m[0]);
